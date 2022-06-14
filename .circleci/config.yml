@@ -1,0 +1,60 @@
+version: 2.1
+orbs:
+  aws-ecr: circleci/aws-ecr@7.3.0
+
+commands:
+  get-tag:
+    steps:
+      - run:
+          name: 'Get tag from branch'
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              echo 'export BRANCH_TAG="master"' >> $BASH_ENV
+              echo 'export BRANCH_TAG="master"' >> ~/.bashrc
+              x='prod'
+            elif [[ "${CIRCLE_BRANCH}" == "staging" ]]; then
+              echo 'export BRANCH_TAG="staging"' >> $BASH_ENV
+              echo 'export BRANCH_TAG="staging"' >> ~/.bashrc
+              x='staging'
+            else
+              echo 'export BRANCH_TAG="dev"' >> $BASH_ENV
+              echo 'export BRANCH_TAG="dev"' >> ~/.bashrc
+              x='dev'
+            fi
+            echo $x
+  docker-hub-auth:
+    description: "Authenticate with Docker Hub to avoid rate limiting"
+    steps:
+      - run:
+          name: Login to Docker Hub
+          command: docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD
+
+jobs: 
+  build-and-push-image:
+    machine: 
+      docker_layer_caching: true
+      image: ubuntu-2004:202201-02
+    steps:
+      - checkout
+      - get-tag
+      - docker-hub-auth
+      - run:
+          name: Start container and verify it's working
+          command: |
+            set -x
+            echo $BRANCH_TAG
+            docker build -t $CIRCLE_PROJECT_REPONAME:$BRANCH_TAG .
+            docker-compose -f docker-compose.yml up -d --force-recreate
+            docker tag $CIRCLE_PROJECT_REPONAME:$BRANCH_TAG $AWS_ECR_ACCOUNT_URL/$CIRCLE_PROJECT_REPONAME:$BRANCH_TAG
+            docker tag $CIRCLE_PROJECT_REPONAME:$BRANCH_TAG $AWS_ECR_ACCOUNT_URL/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1
+            docker tag $CIRCLE_PROJECT_REPONAME:$BRANCH_TAG $AWS_ECR_ACCOUNT_URL/$CIRCLE_PROJECT_REPONAME:$BRANCH_TAG.$CIRCLE_SHA1
+      - aws-ecr/ecr-login
+      - aws-ecr/push-image:
+          repo: $CIRCLE_PROJECT_REPONAME
+          tag: $BRANCH_TAG,$CIRCLE_SHA1,$BRANCH_TAG.$CIRCLE_SHA1
+
+workflows:
+  build-and-push:
+    jobs:
+      - build-and-push-image
+
