@@ -56,5 +56,4 @@ jobs:
 workflows:
   build-and-push:
     jobs:
-      - build-and-push-image:
-          context: myorg
+      - build-and-push-image
