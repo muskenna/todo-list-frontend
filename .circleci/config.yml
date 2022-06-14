@@ -53,6 +53,7 @@ jobs:
           repo: $CIRCLE_PROJECT_REPONAME
           tag: $BRANCH_TAG,$CIRCLE_SHA1,$BRANCH_TAG.$CIRCLE_SHA1
 
+
 workflows:
   build-and-push:
     jobs:
